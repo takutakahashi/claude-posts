@@ -1,0 +1,32 @@
+linters:
+  enable:
+    - gofmt
+    - goimports
+    - govet
+    - golint
+    - ineffassign
+    - misspell
+    - errcheck
+    - staticcheck
+    - unused
+    - gosimple
+    - structcheck
+    - varcheck
+    - deadcode
+    - typecheck
+
+linters-settings:
+  gofmt:
+    simplify: true
+  goimports:
+    local-prefixes: github.com/takutakahashi/claude-posts
+
+issues:
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - errcheck
+
+run:
+  timeout: 5m
+  tests: true
