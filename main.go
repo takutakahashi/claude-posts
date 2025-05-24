@@ -46,6 +46,9 @@ func main() {
 
 	// Check if Slack credentials are available
 	if slackBotToken == "" || slackChannelID == "" || slackThreadTS == "" {
+		if slackBotToken != "" {
+			log.Fatal("SLACK_BOT_TOKEN is set but SLACK_CHANNEL_ID and/or SLACK_THREAD_TS are missing")
+		}
 		debugMode = true
 		log.Println("Slack credentials not found. Running in debug mode, output will be printed to stdout")
 	}
