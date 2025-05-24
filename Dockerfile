@@ -28,8 +28,9 @@ COPY --from=builder /app/claude-posts .
 RUN mkdir -p /data
 
 # Set environment variables
-ENV SLACK_TOKEN=""
+ENV SLACK_BOT_TOKEN=""
 ENV SLACK_CHANNEL_ID=""
 ENV SLACK_THREAD_TS=""
 
+# Example usage with flags: ./claude-posts --slack-bot-token=xxx --slack-channel-id=yyy --slack-thread-ts=zzz
 CMD ["./claude-posts"]

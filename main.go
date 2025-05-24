@@ -10,6 +10,8 @@ import (
 	"strings"
 
 	"github.com/slack-go/slack"
+	"github.com/spf13/pflag"
+	"github.com/spf13/viper"
 )
 
 type Message struct {
@@ -36,10 +38,22 @@ type ContentItem struct {
 }
 
 func main() {
-	// Get Slack token and channel from environment variables
-	slackBotToken := os.Getenv("SLACK_BOT_TOKEN")
-	slackChannelID := os.Getenv("SLACK_CHANNEL_ID")
-	slackThreadTS := os.Getenv("SLACK_THREAD_TS")
+	pflag.String("slack-bot-token", "", "Slack bot token")
+	pflag.String("slack-channel-id", "", "Slack channel ID")
+	pflag.String("slack-thread-ts", "", "Slack thread timestamp")
+	pflag.Parse()
+
+	if err := viper.BindPFlags(pflag.CommandLine); err != nil {
+		log.Fatalf("Error binding command line flags: %v", err)
+	}
+
+	viper.SetEnvPrefix("SLACK")
+	viper.AutomaticEnv()
+	viper.SetEnvKeyReplacer(strings.NewReplacer("-", "_"))
+
+	slackBotToken := viper.GetString("slack-bot-token")
+	slackChannelID := viper.GetString("slack-channel-id")
+	slackThreadTS := viper.GetString("slack-thread-ts")
 
 	// Flag to determine if we're in debug mode (no Slack credentials)
 	debugMode := false
@@ -47,7 +61,7 @@ func main() {
 	// Check if Slack credentials are available
 	if slackBotToken == "" || slackChannelID == "" || slackThreadTS == "" {
 		if slackBotToken != "" {
-			log.Fatal("SLACK_BOT_TOKEN is set but SLACK_CHANNEL_ID and/or SLACK_THREAD_TS are missing")
+			log.Fatal("Slack bot token is set but channel ID and/or thread timestamp are missing")
 		}
 		debugMode = true
 		log.Println("Slack credentials not found. Running in debug mode, output will be printed to stdout")
