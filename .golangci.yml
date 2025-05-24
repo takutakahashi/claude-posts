@@ -3,17 +3,15 @@ linters:
     - gofmt
     - goimports
     - govet
-    - golint
     - ineffassign
     - misspell
     - errcheck
     - staticcheck
     - unused
     - gosimple
-    - structcheck
-    - varcheck
-    - deadcode
     - typecheck
+    # Replacing deprecated linters
+    - revive  # replacement for golint
 
 linters-settings:
   gofmt:
