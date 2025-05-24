@@ -43,7 +43,9 @@ func main() {
 	pflag.String("slack-thread-ts", "", "Slack thread timestamp")
 	pflag.Parse()
 
-	viper.BindPFlags(pflag.CommandLine)
+	if err := viper.BindPFlags(pflag.CommandLine); err != nil {
+		log.Fatalf("Error binding command line flags: %v", err)
+	}
 
 	viper.SetEnvPrefix("SLACK")
 	viper.AutomaticEnv()
