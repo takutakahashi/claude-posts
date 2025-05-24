@@ -60,10 +60,10 @@ func TestProcessBuffer(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			var buffer strings.Builder
 			buffer.WriteString(tt.input)
-			
+
 			// Test in debug mode to avoid needing Slack credentials
 			processBuffer(&buffer, nil, "", "", true)
-			
+
 			// This is a basic test - in a real scenario you'd capture output
 			// For now, we're just testing that the function doesn't panic
 		})
