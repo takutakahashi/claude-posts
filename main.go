@@ -153,4 +153,3 @@ func processBuffer(jsonBuffer *strings.Builder, api *slack.Client, channelID, th
 		}
 	}
 }
-
