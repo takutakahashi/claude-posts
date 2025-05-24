@@ -41,7 +41,7 @@ jobs:
       run: go vet ./...
 
     - name: Run tests
-      run: go test -race -coverprofile=coverage.out -covermode=atomic ./...
+      run: CGO_ENABLED=0 go test -race -coverprofile=coverage.out -covermode=atomic ./...
 
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4
@@ -51,7 +51,7 @@ jobs:
         name: codecov-umbrella
 
     - name: Build
-      run: go build -v ./...
+      run: CGO_ENABLED=0 go build -v ./...
 
   lint:
     runs-on: ubuntu-latest
