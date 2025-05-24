@@ -38,7 +38,7 @@ type ContentItem struct {
 
 func main() {
 	// Get Slack token and channel from environment variables
-	slackToken := os.Getenv("SLACK_TOKEN")
+	slackBotToken := os.Getenv("SLACK_BOT_TOKEN")
 	slackChannelID := os.Getenv("SLACK_CHANNEL_ID")
 	slackThreadTS := os.Getenv("SLACK_THREAD_TS")
 	
@@ -46,7 +46,7 @@ func main() {
 	debugMode := false
 	
 	// Check if Slack credentials are available
-	if slackToken == "" || slackChannelID == "" || slackThreadTS == "" {
+	if slackBotToken == "" || slackChannelID == "" || slackThreadTS == "" {
 		debugMode = true
 		log.Println("Slack credentials not found. Running in debug mode, output will be printed to stdout")
 	}
@@ -54,7 +54,7 @@ func main() {
 	// Create Slack client if not in debug mode
 	var api *slack.Client
 	if !debugMode {
-		api = slack.New(slackToken)
+		api = slack.New(slackBotToken)
 	}
 	
 	// Set up reader for stdin that doesn't buffer full lines
