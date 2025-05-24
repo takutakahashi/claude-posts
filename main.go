@@ -38,9 +38,9 @@ type ContentItem struct {
 }
 
 func main() {
-	pflag.String("slack-bot-token", "", "Slack bot token")
-	pflag.String("slack-channel-id", "", "Slack channel ID")
-	pflag.String("slack-thread-ts", "", "Slack thread timestamp")
+	pflag.String("bot-token", "", "Slack bot token")
+	pflag.String("channel-id", "", "Slack channel ID")
+	pflag.String("thread-ts", "", "Slack thread timestamp")
 	pflag.Parse()
 
 	if err := viper.BindPFlags(pflag.CommandLine); err != nil {
@@ -51,9 +51,9 @@ func main() {
 	viper.AutomaticEnv()
 	viper.SetEnvKeyReplacer(strings.NewReplacer("-", "_"))
 
-	slackBotToken := viper.GetString("slack-bot-token")
-	slackChannelID := viper.GetString("slack-channel-id")
-	slackThreadTS := viper.GetString("slack-thread-ts")
+	slackBotToken := viper.GetString("bot-token")
+	slackChannelID := viper.GetString("channel-id")
+	slackThreadTS := viper.GetString("thread-ts")
 
 	// Flag to determine if we're in debug mode (no Slack credentials)
 	debugMode := false
