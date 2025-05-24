@@ -2,8 +2,11 @@ package main
 
 import (
 	"encoding/json"
+	"os"
 	"strings"
 	"testing"
+
+	"github.com/spf13/viper"
 )
 
 func TestProcessBuffer(t *testing.T) {
@@ -137,4 +140,30 @@ func TestContentItem(t *testing.T) {
 	if content.Text != "Hello world" {
 		t.Errorf("Expected text 'Hello world', got '%s'", content.Text)
 	}
+}
+
+func TestViperConfiguration(t *testing.T) {
+	viper.Reset()
+
+	viper.SetEnvPrefix("SLACK")
+	viper.AutomaticEnv()
+	viper.SetEnvKeyReplacer(strings.NewReplacer("-", "_"))
+
+	os.Setenv("SLACK_BOT_TOKEN", "test-token")
+	os.Setenv("SLACK_CHANNEL_ID", "test-channel")
+	os.Setenv("SLACK_THREAD_TS", "test-thread")
+
+	if token := viper.GetString("bot-token"); token != "test-token" {
+		t.Errorf("Expected bot-token to be 'test-token', got '%s'", token)
+	}
+	if channel := viper.GetString("channel-id"); channel != "test-channel" {
+		t.Errorf("Expected channel-id to be 'test-channel', got '%s'", channel)
+	}
+	if thread := viper.GetString("thread-ts"); thread != "test-thread" {
+		t.Errorf("Expected thread-ts to be 'test-thread', got '%s'", thread)
+	}
+
+	os.Unsetenv("SLACK_BOT_TOKEN")
+	os.Unsetenv("SLACK_CHANNEL_ID")
+	os.Unsetenv("SLACK_THREAD_TS")
 }
