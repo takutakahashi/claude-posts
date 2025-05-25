@@ -33,7 +33,7 @@ func TestExitOnInvalidJSON(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cmd := exec.Command("./claude-posts-test")
 			cmd.Stdin = strings.NewReader(tt.input)
-			
+
 			err := cmd.Run()
 			if err == nil {
 				t.Errorf("Expected program to exit with error for invalid JSON, but it succeeded")
