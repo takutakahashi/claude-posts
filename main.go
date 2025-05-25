@@ -113,8 +113,7 @@ func processBuffer(jsonBuffer *strings.Builder, api *slack.Client, channelID, th
 
 	var msg Message
 	if err := json.Unmarshal([]byte(jsonStr), &msg); err != nil {
-		log.Printf("Error parsing JSON: %v", err)
-		return
+		log.Fatalf("Error parsing JSON: %v", err)
 	}
 
 	// Only process assistant messages
@@ -124,8 +123,7 @@ func processBuffer(jsonBuffer *strings.Builder, api *slack.Client, channelID, th
 
 	var assistantMsg AssistantMessage
 	if err := json.Unmarshal(msg.Message, &assistantMsg); err != nil {
-		log.Printf("Error parsing assistant message: %v", err)
-		return
+		log.Fatalf("Error parsing assistant message: %v", err)
 	}
 
 	// Filter for tool executions and text messages
