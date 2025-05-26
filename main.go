@@ -30,12 +30,26 @@ type AssistantMessage struct {
 	StopReason string        `json:"stop_reason"`
 }
 
+type UserMessage struct {
+	Role    string        `json:"role"`
+	Content []ContentItem `json:"content"`
+}
+
 type ContentItem struct {
-	Type  string          `json:"type"`
-	Text  string          `json:"text,omitempty"`
-	ID    string          `json:"id,omitempty"`
-	Name  string          `json:"name,omitempty"`
-	Input json.RawMessage `json:"input,omitempty"`
+	Type      string          `json:"type"`
+	Text      string          `json:"text,omitempty"`
+	ID        string          `json:"id,omitempty"`
+	Name      string          `json:"name,omitempty"`
+	Input     json.RawMessage `json:"input,omitempty"`
+	Content   string          `json:"content,omitempty"`
+	ToolUseID string          `json:"tool_use_id,omitempty"`
+}
+
+type ToolExecution struct {
+	ID     string
+	Name   string
+	Input  json.RawMessage
+	Output string
 }
 
 func main() {
@@ -104,37 +118,53 @@ func main() {
 	}
 }
 
-func createToolExecutionBlocks(toolName string, input json.RawMessage) []slack.Block {
+func createToolExecutionBlocks(tool ToolExecution) []slack.Block {
 	// Create header section with subtle formatting
-	headerText := slack.NewTextBlockObject("mrkdwn", fmt.Sprintf("*Tool executed:* %s", toolName), false, false)
+	headerText := slack.NewTextBlockObject("mrkdwn", fmt.Sprintf("*Tool executed:* %s", tool.Name), false, false)
 	headerSection := slack.NewSectionBlock(headerText, nil, nil)
 
 	// Create blocks for the message
 	blocks := []slack.Block{headerSection}
 
-	if len(input) > 0 {
+	blocks = append(blocks, slack.NewDividerBlock())
+
+	// Create input section
+	if len(tool.Input) > 0 {
 		var prettyJSON bytes.Buffer
-		if err := json.Indent(&prettyJSON, input, "", "  "); err == nil {
+		if err := json.Indent(&prettyJSON, tool.Input, "", "  "); err == nil {
 			// Create input section with code formatting
 			codeText := prettyJSON.String()
 			if codeText == "null" || codeText == "" {
 				codeText = "{}"
 			}
 
-			inputText := slack.NewTextBlockObject(
-				"mrkdwn",
-				fmt.Sprintf("*Input:*\n```%s```", codeText),
-				false,
-				false,
-			)
+			// Create section block for input
+			inputHeaderText := slack.NewTextBlockObject("mrkdwn", "*Input:*", false, false)
+			inputHeaderSection := slack.NewSectionBlock(inputHeaderText, nil, nil)
 
-			inputSection := slack.NewSectionBlock(inputText, nil, nil)
-			blocks = append(blocks, inputSection)
+			inputContentText := slack.NewTextBlockObject("mrkdwn", fmt.Sprintf("```%s```", codeText), false, false)
+			inputContentSection := slack.NewSectionBlock(inputContentText, nil, nil)
+
+			blocks = append(blocks, inputHeaderSection, inputContentSection)
 		}
+	}
+
+	// Create output section if output exists
+	if tool.Output != "" {
+		// Create section block for output
+		outputHeaderText := slack.NewTextBlockObject("mrkdwn", "*Output:*", false, false)
+		outputHeaderSection := slack.NewSectionBlock(outputHeaderText, nil, nil)
+
+		outputContentText := slack.NewTextBlockObject("mrkdwn", fmt.Sprintf("```%s```", tool.Output), false, false)
+		outputContentSection := slack.NewSectionBlock(outputContentText, nil, nil)
+
+		blocks = append(blocks, outputHeaderSection, outputContentSection)
 	}
 
 	return blocks
 }
+
+var pendingTools = make(map[string]*ToolExecution)
 
 func processBuffer(jsonBuffer *strings.Builder, api *slack.Client, channelID, threadTS string, debugMode bool) {
 	jsonStr := jsonBuffer.String()
@@ -149,11 +179,16 @@ func processBuffer(jsonBuffer *strings.Builder, api *slack.Client, channelID, th
 		log.Fatalf("Error parsing JSON: %v", err)
 	}
 
-	// Only process assistant messages
-	if msg.Type != "assistant" {
-		return
+	// Process based on message type
+	switch msg.Type {
+	case "assistant":
+		processAssistantMessage(msg, api, channelID, threadTS, debugMode)
+	case "user":
+		processUserMessage(msg, api, channelID, threadTS, debugMode)
 	}
+}
 
+func processAssistantMessage(msg Message, api *slack.Client, channelID, threadTS string, debugMode bool) {
 	var assistantMsg AssistantMessage
 	if err := json.Unmarshal(msg.Message, &assistantMsg); err != nil {
 		log.Fatalf("Error parsing assistant message: %v", err)
@@ -165,10 +200,13 @@ func processBuffer(jsonBuffer *strings.Builder, api *slack.Client, channelID, th
 
 	for _, content := range assistantMsg.Content {
 		if content.Type == "tool_use" {
-			// Create Block Kit message for tool execution
-			toolBlocks := createToolExecutionBlocks(content.Name, content.Input)
-			blocks = append(blocks, toolBlocks...)
+			pendingTools[content.ID] = &ToolExecution{
+				ID:    content.ID,
+				Name:  content.Name,
+				Input: content.Input,
+			}
 
+			// Only post tool executions without output in debug mode
 			if debugMode {
 				var inputStr string
 				if len(content.Input) > 0 {
@@ -188,7 +226,7 @@ func processBuffer(jsonBuffer *strings.Builder, api *slack.Client, channelID, th
 		}
 	}
 
-	// If there are outputs, either post to Slack or print to stdout
+	// If there are text outputs, post to Slack or print to stdout
 	if len(blocks) > 0 || len(textOutputs) > 0 {
 		if debugMode {
 			// Debug mode: print to stdout
@@ -198,33 +236,74 @@ func processBuffer(jsonBuffer *strings.Builder, api *slack.Client, channelID, th
 				fmt.Println(text)
 			}
 			fmt.Println("-------------")
-		} else {
-			// Normal mode: post to Slack using Block Kit
-			if len(blocks) > 0 {
-				_, _, err := api.PostMessage(
-					channelID,
-					slack.MsgOptionBlocks(blocks...),
-					slack.MsgOptionTS(threadTS),
-				)
+		} else if len(blocks) > 0 {
+			// Normal mode: post text messages to Slack using Block Kit
+			_, _, err := api.PostMessage(
+				channelID,
+				slack.MsgOptionBlocks(blocks...),
+				slack.MsgOptionTS(threadTS),
+			)
 
-				if err != nil {
-					log.Printf("Error posting to Slack: %v", err)
-				} else {
-					log.Printf("Posted to Slack with Block Kit formatting")
-				}
+			if err != nil {
+				log.Printf("Error posting to Slack: %v", err)
 			} else {
-				message := strings.Join(textOutputs, "\n")
-				_, _, err := api.PostMessage(
-					channelID,
-					slack.MsgOptionText(message, false),
-					slack.MsgOptionTS(threadTS),
-				)
+				log.Printf("Posted to Slack with Block Kit formatting")
+			}
+		}
+	}
+}
 
-				if err != nil {
-					log.Printf("Error posting to Slack: %v", err)
+func processUserMessage(msg Message, api *slack.Client, channelID, threadTS string, debugMode bool) {
+	var userMsg UserMessage
+	if err := json.Unmarshal(msg.Message, &userMsg); err != nil {
+		log.Fatalf("Error parsing user message: %v", err)
+	}
+
+	// Process tool results
+	for _, content := range userMsg.Content {
+		if content.Type == "tool_result" && content.ToolUseID != "" {
+			// Find the corresponding tool execution
+			if tool, exists := pendingTools[content.ToolUseID]; exists {
+				tool.Output = content.Content
+
+				// Create complete tool execution blocks
+				toolBlocks := createToolExecutionBlocks(*tool)
+
+				// Post to Slack or print to stdout
+				if debugMode {
+					fmt.Println("DEBUG OUTPUT:")
+					fmt.Println("-------------")
+					fmt.Printf("Tool executed: %s\n", tool.Name)
+
+					var inputStr string
+					if len(tool.Input) > 0 {
+						var prettyJSON bytes.Buffer
+						if err := json.Indent(&prettyJSON, tool.Input, "", "  "); err == nil {
+							inputStr = fmt.Sprintf("Input:\n```\n%s\n```", prettyJSON.String())
+						}
+					}
+					fmt.Println(inputStr)
+
+					if tool.Output != "" {
+						fmt.Printf("Output:\n```\n%s\n```\n", tool.Output)
+					}
+					fmt.Println("-------------")
 				} else {
-					log.Printf("Posted to Slack: %s", message)
+					// Post to Slack using Block Kit
+					_, _, err := api.PostMessage(
+						channelID,
+						slack.MsgOptionBlocks(toolBlocks...),
+						slack.MsgOptionTS(threadTS),
+					)
+
+					if err != nil {
+						log.Printf("Error posting to Slack: %v", err)
+					} else {
+						log.Printf("Posted tool execution to Slack with Block Kit formatting")
+					}
 				}
+
+				delete(pendingTools, content.ToolUseID)
 			}
 		}
 	}
