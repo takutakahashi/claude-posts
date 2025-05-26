@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"bytes"
 
 	"github.com/slack-go/slack"
 	"github.com/spf13/pflag"
@@ -103,6 +104,38 @@ func main() {
 	}
 }
 
+func createToolExecutionBlocks(toolName string, input json.RawMessage) []slack.Block {
+	// Create header section with subtle formatting
+	headerText := slack.NewTextBlockObject("mrkdwn", fmt.Sprintf("*Tool executed:* %s", toolName), false, false)
+	headerSection := slack.NewSectionBlock(headerText, nil, nil)
+
+	// Create blocks for the message
+	blocks := []slack.Block{headerSection}
+
+	if len(input) > 0 {
+		var prettyJSON bytes.Buffer
+		if err := json.Indent(&prettyJSON, input, "", "  "); err == nil {
+			// Create input section with code formatting
+			codeText := prettyJSON.String()
+			if codeText == "null" || codeText == "" {
+				codeText = "{}"
+			}
+			
+			inputText := slack.NewTextBlockObject(
+				"mrkdwn",
+				fmt.Sprintf("*Input:*\n```%s```", codeText),
+				false,
+				false,
+			)
+			
+			inputSection := slack.NewSectionBlock(inputText, nil, nil)
+			blocks = append(blocks, inputSection)
+		}
+	}
+
+	return blocks
+}
+
 func processBuffer(jsonBuffer *strings.Builder, api *slack.Client, channelID, threadTS string, debugMode bool) {
 	jsonStr := jsonBuffer.String()
 	jsonStr = strings.TrimSpace(jsonStr)
@@ -126,41 +159,72 @@ func processBuffer(jsonBuffer *strings.Builder, api *slack.Client, channelID, th
 		log.Fatalf("Error parsing assistant message: %v", err)
 	}
 
-	// Filter for tool executions and text messages
-	var outputs []string
+	// Process tool executions and text messages
+	var textOutputs []string
+	var blocks []slack.Block
+
 	for _, content := range assistantMsg.Content {
 		if content.Type == "tool_use" {
-			toolInfo := fmt.Sprintf("🔧 Tool executed: %s", content.Name)
-			outputs = append(outputs, toolInfo)
+			// Create Block Kit message for tool execution
+			toolBlocks := createToolExecutionBlocks(content.Name, content.Input)
+			blocks = append(blocks, toolBlocks...)
+			
+			if debugMode {
+				var inputStr string
+				if len(content.Input) > 0 {
+					var prettyJSON bytes.Buffer
+					if err := json.Indent(&prettyJSON, content.Input, "", "  "); err == nil {
+						inputStr = fmt.Sprintf("\nInput:\n```\n%s\n```", prettyJSON.String())
+					}
+				}
+				textOutputs = append(textOutputs, fmt.Sprintf("Tool executed: %s%s", content.Name, inputStr))
+			}
 		} else if content.Type == "text" && strings.TrimSpace(content.Text) != "" {
-			outputs = append(outputs, strings.TrimSpace(content.Text))
+			text := strings.TrimSpace(content.Text)
+			textOutputs = append(textOutputs, text)
+			
+			textBlock := slack.NewSectionBlock(slack.NewTextBlockObject("mrkdwn", text, false, false), nil, nil)
+			blocks = append(blocks, textBlock)
 		}
 	}
 
 	// If there are outputs, either post to Slack or print to stdout
-	if len(outputs) > 0 {
-		message := strings.Join(outputs, "\n")
-
-		timestampedMessage := message
-
+	if len(blocks) > 0 || len(textOutputs) > 0 {
 		if debugMode {
 			// Debug mode: print to stdout
 			fmt.Println("DEBUG OUTPUT:")
 			fmt.Println("-------------")
-			fmt.Println(timestampedMessage)
+			for _, text := range textOutputs {
+				fmt.Println(text)
+			}
 			fmt.Println("-------------")
 		} else {
-			// Normal mode: post to Slack
-			_, _, err := api.PostMessage(
-				channelID,
-				slack.MsgOptionText(timestampedMessage, false),
-				slack.MsgOptionTS(threadTS),
-			)
+			// Normal mode: post to Slack using Block Kit
+			if len(blocks) > 0 {
+				_, _, err := api.PostMessage(
+					channelID,
+					slack.MsgOptionBlocks(blocks...),
+					slack.MsgOptionTS(threadTS),
+				)
 
-			if err != nil {
-				log.Printf("Error posting to Slack: %v", err)
+				if err != nil {
+					log.Printf("Error posting to Slack: %v", err)
+				} else {
+					log.Printf("Posted to Slack with Block Kit formatting")
+				}
 			} else {
-				log.Printf("Posted to Slack: %s", message)
+				message := strings.Join(textOutputs, "\n")
+				_, _, err := api.PostMessage(
+					channelID,
+					slack.MsgOptionText(message, false),
+					slack.MsgOptionTS(threadTS),
+				)
+
+				if err != nil {
+					log.Printf("Error posting to Slack: %v", err)
+				} else {
+					log.Printf("Posted to Slack: %s", message)
+				}
 			}
 		}
 	}
