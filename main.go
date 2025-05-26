@@ -2,13 +2,13 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"os"
 	"strings"
-	"bytes"
 
 	"github.com/slack-go/slack"
 	"github.com/spf13/pflag"
@@ -120,14 +120,14 @@ func createToolExecutionBlocks(toolName string, input json.RawMessage) []slack.B
 			if codeText == "null" || codeText == "" {
 				codeText = "{}"
 			}
-			
+
 			inputText := slack.NewTextBlockObject(
 				"mrkdwn",
 				fmt.Sprintf("*Input:*\n```%s```", codeText),
 				false,
 				false,
 			)
-			
+
 			inputSection := slack.NewSectionBlock(inputText, nil, nil)
 			blocks = append(blocks, inputSection)
 		}
@@ -168,7 +168,7 @@ func processBuffer(jsonBuffer *strings.Builder, api *slack.Client, channelID, th
 			// Create Block Kit message for tool execution
 			toolBlocks := createToolExecutionBlocks(content.Name, content.Input)
 			blocks = append(blocks, toolBlocks...)
-			
+
 			if debugMode {
 				var inputStr string
 				if len(content.Input) > 0 {
@@ -182,7 +182,7 @@ func processBuffer(jsonBuffer *strings.Builder, api *slack.Client, channelID, th
 		} else if content.Type == "text" && strings.TrimSpace(content.Text) != "" {
 			text := strings.TrimSpace(content.Text)
 			textOutputs = append(textOutputs, text)
-			
+
 			textBlock := slack.NewSectionBlock(slack.NewTextBlockObject("mrkdwn", text, false, false), nil, nil)
 			blocks = append(blocks, textBlock)
 		}
