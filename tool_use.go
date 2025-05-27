@@ -10,7 +10,7 @@ import (
 
 func createToolUseContextBlock(content ContentItem, showInput bool) *slack.ContextBlock {
 	var text string
-	
+
 	if showInput {
 		inputStr := formatToolInput(content.Input)
 		text = fmt.Sprintf("🔧 *Tool*: %s\n*Input*: %s", content.Name, inputStr)
