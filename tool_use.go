@@ -10,11 +10,11 @@ import (
 
 func createToolUseContextBlock(content ContentItem) *slack.ContextBlock {
 	inputStr := formatToolInput(content.Input)
-	
+
 	text := fmt.Sprintf("🔧 *Tool*: %s\n*Input*: %s", content.Name, inputStr)
-	
+
 	textObj := slack.NewTextBlockObject(slack.MarkdownType, text, false, false)
-	
+
 	return slack.NewContextBlock("", textObj)
 }
 
@@ -31,18 +31,18 @@ func formatToolInput(input json.RawMessage) string {
 				return fmt.Sprintf("`%s`", cmdStr)
 			}
 		}
-		
+
 		inputJSON, err := json.MarshalIndent(inputMap, "", "  ")
 		if err == nil {
 			return fmt.Sprintf("```%s```", string(inputJSON))
 		}
 	}
-	
+
 	var inputStr string
 	err = json.Unmarshal(input, &inputStr)
 	if err == nil {
 		return fmt.Sprintf("`%s`", inputStr)
 	}
-	
+
 	return fmt.Sprintf("`%s`", strings.TrimSpace(string(input)))
 }

@@ -154,7 +154,7 @@ func processBuffer(jsonBuffer *strings.Builder, api *slack.Client, channelID, th
 			if textMessage != "" {
 				fmt.Println(textMessage)
 			}
-			
+
 			// Print block information in debug mode
 			for _, block := range blocks {
 				if contextBlock, ok := block.(*slack.ContextBlock); ok {
@@ -169,19 +169,19 @@ func processBuffer(jsonBuffer *strings.Builder, api *slack.Client, channelID, th
 		} else {
 			// Normal mode: post to Slack
 			var options []slack.MsgOption
-			
+
 			options = append(options, slack.MsgOptionTS(threadTS))
-			
+
 			// Add text if available
 			if textMessage != "" {
 				options = append(options, slack.MsgOptionText(textMessage, false))
 			}
-			
+
 			// Add blocks if available
 			if len(blocks) > 0 {
 				options = append(options, slack.MsgOptionBlocks(blocks...))
 			}
-			
+
 			_, _, err := api.PostMessage(channelID, options...)
 
 			if err != nil {
