@@ -8,10 +8,15 @@ import (
 	"github.com/slack-go/slack"
 )
 
-func createToolUseContextBlock(content ContentItem) *slack.ContextBlock {
-	inputStr := formatToolInput(content.Input)
+func createToolUseContextBlock(content ContentItem, showInput bool) *slack.ContextBlock {
+	var text string
 
-	text := fmt.Sprintf("🔧 *Tool*: %s\n*Input*: %s", content.Name, inputStr)
+	if showInput {
+		inputStr := formatToolInput(content.Input)
+		text = fmt.Sprintf("🔧 *Tool*: %s\n*Input*: %s", content.Name, inputStr)
+	} else {
+		text = fmt.Sprintf("🔧 *Tool*: %s", content.Name)
+	}
 
 	textObj := slack.NewTextBlockObject(slack.MarkdownType, text, false, false)
 

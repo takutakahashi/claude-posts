@@ -65,7 +65,7 @@ func TestProcessBuffer(t *testing.T) {
 			buffer.WriteString(tt.input)
 
 			// Test in debug mode to avoid needing Slack credentials
-			processBuffer(&buffer, nil, "", "", true)
+			processBuffer(&buffer, nil, "", "", true, true) // Default showInput to true
 
 			// This is a basic test - in a real scenario you'd capture output
 			// For now, we're just testing that the function doesn't panic

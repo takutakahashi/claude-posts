@@ -41,6 +41,7 @@ func main() {
 	pflag.String("bot-token", "", "Slack bot token")
 	pflag.String("channel-id", "", "Slack channel ID")
 	pflag.String("thread-ts", "", "Slack thread timestamp")
+	pflag.Bool("show-input", true, "Show input field in tool execution messages")
 	pflag.Parse()
 
 	if err := viper.BindPFlags(pflag.CommandLine); err != nil {
@@ -54,6 +55,7 @@ func main() {
 	slackBotToken := viper.GetString("bot-token")
 	slackChannelID := viper.GetString("channel-id")
 	slackThreadTS := viper.GetString("thread-ts")
+	showInput := viper.GetBool("show-input")
 
 	// Flag to determine if we're in debug mode (no Slack credentials)
 	debugMode := false
@@ -86,7 +88,7 @@ func main() {
 		if err != nil {
 			if err == io.EOF {
 				// End of file, process any remaining data in buffer
-				processBuffer(&jsonBuffer, api, slackChannelID, slackThreadTS, debugMode)
+				processBuffer(&jsonBuffer, api, slackChannelID, slackThreadTS, debugMode, showInput)
 				break
 			}
 			log.Fatalf("Error reading from stdin: %v", err)
@@ -97,13 +99,13 @@ func main() {
 
 		// If we see a newline, try to process the buffer as a complete JSON object
 		if b == '\n' {
-			processBuffer(&jsonBuffer, api, slackChannelID, slackThreadTS, debugMode)
+			processBuffer(&jsonBuffer, api, slackChannelID, slackThreadTS, debugMode, showInput)
 			jsonBuffer.Reset()
 		}
 	}
 }
 
-func processBuffer(jsonBuffer *strings.Builder, api *slack.Client, channelID, threadTS string, debugMode bool) {
+func processBuffer(jsonBuffer *strings.Builder, api *slack.Client, channelID, threadTS string, debugMode bool, showInput bool) {
 	jsonStr := jsonBuffer.String()
 	jsonStr = strings.TrimSpace(jsonStr)
 
@@ -133,7 +135,7 @@ func processBuffer(jsonBuffer *strings.Builder, api *slack.Client, channelID, th
 	for _, content := range assistantMsg.Content {
 		if content.Type == "tool_use" {
 			// Create context block for tool execution
-			contextBlock := createToolUseContextBlock(content)
+			contextBlock := createToolUseContextBlock(content, showInput)
 			blocks = append(blocks, contextBlock)
 		} else if content.Type == "text" && strings.TrimSpace(content.Text) != "" {
 			textOutputs = append(textOutputs, strings.TrimSpace(content.Text))
