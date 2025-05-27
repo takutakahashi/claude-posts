@@ -119,18 +119,11 @@ func main() {
 }
 
 func createToolExecutionBlocks(tool ToolExecution) []slack.Block {
-	// Create header section with just the tool name
-	headerText := slack.NewTextBlockObject("mrkdwn", fmt.Sprintf("*Tool executed:* %s", tool.Name), false, false)
+	// Create a single text block with the tool name and _details hidden_ format
+	headerText := slack.NewTextBlockObject("mrkdwn", fmt.Sprintf("*Tool executed:* %s _(details hidden)_", tool.Name), false, false)
 	headerSection := slack.NewSectionBlock(headerText, nil, nil)
 
 	blocks := []slack.Block{headerSection}
-
-	// Create a context block with a message indicating there's hidden content
-	contextElements := []slack.MixedElement{
-		slack.NewTextBlockObject("mrkdwn", "_Details hidden_", false, false),
-	}
-	contextBlock := slack.NewContextBlock("context", contextElements...)
-	blocks = append(blocks, contextBlock)
 
 	return blocks
 }
