@@ -127,40 +127,67 @@ func processBuffer(jsonBuffer *strings.Builder, api *slack.Client, channelID, th
 	}
 
 	// Filter for tool executions and text messages
-	var outputs []string
+	var textOutputs []string
+	var blocks []slack.Block
+
 	for _, content := range assistantMsg.Content {
 		if content.Type == "tool_use" {
-			toolInfo := fmt.Sprintf("🔧 Tool executed: %s", content.Name)
-			outputs = append(outputs, toolInfo)
+			// Create context block for tool execution
+			contextBlock := createToolUseContextBlock(content)
+			blocks = append(blocks, contextBlock)
 		} else if content.Type == "text" && strings.TrimSpace(content.Text) != "" {
-			outputs = append(outputs, strings.TrimSpace(content.Text))
+			textOutputs = append(textOutputs, strings.TrimSpace(content.Text))
 		}
 	}
 
 	// If there are outputs, either post to Slack or print to stdout
-	if len(outputs) > 0 {
-		message := strings.Join(outputs, "\n")
-
-		timestampedMessage := message
+	if len(textOutputs) > 0 || len(blocks) > 0 {
+		textMessage := ""
+		if len(textOutputs) > 0 {
+			textMessage = strings.Join(textOutputs, "\n")
+		}
 
 		if debugMode {
 			// Debug mode: print to stdout
 			fmt.Println("DEBUG OUTPUT:")
 			fmt.Println("-------------")
-			fmt.Println(timestampedMessage)
+			if textMessage != "" {
+				fmt.Println(textMessage)
+			}
+
+			// Print block information in debug mode
+			for _, block := range blocks {
+				if contextBlock, ok := block.(*slack.ContextBlock); ok {
+					for _, elem := range contextBlock.ContextElements.Elements {
+						if textObj, ok := elem.(*slack.TextBlockObject); ok {
+							fmt.Println(textObj.Text)
+						}
+					}
+				}
+			}
 			fmt.Println("-------------")
 		} else {
 			// Normal mode: post to Slack
-			_, _, err := api.PostMessage(
-				channelID,
-				slack.MsgOptionText(timestampedMessage, false),
-				slack.MsgOptionTS(threadTS),
-			)
+			var options []slack.MsgOption
+
+			options = append(options, slack.MsgOptionTS(threadTS))
+
+			// Add text if available
+			if textMessage != "" {
+				options = append(options, slack.MsgOptionText(textMessage, false))
+			}
+
+			// Add blocks if available
+			if len(blocks) > 0 {
+				options = append(options, slack.MsgOptionBlocks(blocks...))
+			}
+
+			_, _, err := api.PostMessage(channelID, options...)
 
 			if err != nil {
 				log.Printf("Error posting to Slack: %v", err)
 			} else {
-				log.Printf("Posted to Slack: %s", message)
+				log.Printf("Posted to Slack: text and/or blocks")
 			}
 		}
 	}
