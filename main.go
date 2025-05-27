@@ -119,47 +119,18 @@ func main() {
 }
 
 func createToolExecutionBlocks(tool ToolExecution) []slack.Block {
-	// Create header section with subtle formatting
+	// Create header section with just the tool name
 	headerText := slack.NewTextBlockObject("mrkdwn", fmt.Sprintf("*Tool executed:* %s", tool.Name), false, false)
 	headerSection := slack.NewSectionBlock(headerText, nil, nil)
 
-	// Create blocks for the message
 	blocks := []slack.Block{headerSection}
 
-	blocks = append(blocks, slack.NewDividerBlock())
-
-	// Create input section
-	if len(tool.Input) > 0 {
-		var prettyJSON bytes.Buffer
-		if err := json.Indent(&prettyJSON, tool.Input, "", "  "); err == nil {
-			// Create input section with code formatting
-			codeText := prettyJSON.String()
-			if codeText == "null" || codeText == "" {
-				codeText = "{}"
-			}
-
-			// Create section block for input
-			inputHeaderText := slack.NewTextBlockObject("mrkdwn", "*Input:*", false, false)
-			inputHeaderSection := slack.NewSectionBlock(inputHeaderText, nil, nil)
-
-			inputContentText := slack.NewTextBlockObject("mrkdwn", fmt.Sprintf("```%s```", codeText), false, false)
-			inputContentSection := slack.NewSectionBlock(inputContentText, nil, nil)
-
-			blocks = append(blocks, inputHeaderSection, inputContentSection)
-		}
+	// Create a context block with a message indicating there's hidden content
+	contextElements := []slack.MixedElement{
+		slack.NewTextBlockObject("mrkdwn", "_Details hidden_", false, false),
 	}
-
-	// Create output section if output exists
-	if tool.Output != "" {
-		// Create section block for output
-		outputHeaderText := slack.NewTextBlockObject("mrkdwn", "*Output:*", false, false)
-		outputHeaderSection := slack.NewSectionBlock(outputHeaderText, nil, nil)
-
-		outputContentText := slack.NewTextBlockObject("mrkdwn", fmt.Sprintf("```%s```", tool.Output), false, false)
-		outputContentSection := slack.NewSectionBlock(outputContentText, nil, nil)
-
-		blocks = append(blocks, outputHeaderSection, outputContentSection)
-	}
+	contextBlock := slack.NewContextBlock("context", contextElements...)
+	blocks = append(blocks, contextBlock)
 
 	return blocks
 }
@@ -266,7 +237,7 @@ func processUserMessage(msg Message, api *slack.Client, channelID, threadTS stri
 			if tool, exists := pendingTools[content.ToolUseID]; exists {
 				tool.Output = content.Content
 
-				// Create complete tool execution blocks
+				// Create tool execution blocks with collapsed details
 				toolBlocks := createToolExecutionBlocks(*tool)
 
 				// Post to Slack or print to stdout
@@ -299,7 +270,7 @@ func processUserMessage(msg Message, api *slack.Client, channelID, threadTS stri
 					if err != nil {
 						log.Printf("Error posting to Slack: %v", err)
 					} else {
-						log.Printf("Posted tool execution to Slack with Block Kit formatting")
+						log.Printf("Posted tool execution to Slack with collapsed details")
 					}
 				}
 
