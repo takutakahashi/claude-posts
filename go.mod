@@ -3,13 +3,13 @@ module github.com/takutakahashi/claude-posts
 go 1.24
 
 require (
+	github.com/fsnotify/fsnotify v1.9.0
 	github.com/slack-go/slack v0.16.0
 	github.com/spf13/pflag v1.0.6
 	github.com/spf13/viper v1.20.1
 )
 
 require (
-	github.com/fsnotify/fsnotify v1.8.0 // indirect
 	github.com/go-viper/mapstructure/v2 v2.2.1 // indirect
 	github.com/gorilla/websocket v1.4.2 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.3 // indirect

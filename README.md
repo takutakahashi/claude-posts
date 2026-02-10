@@ -39,11 +39,37 @@ go build -o claude-posts
 ./claude-posts
 ```
 
-Example with input from a file:
+#### Mode 1: Read from stdin (original behavior)
 
 ```bash
+# Example with input from a file
 cat data/claude.jsonl | go run .
+
+# Or pipe from another command
+echo '{"type":"assistant",...}' | go run .
 ```
+
+#### Mode 2: Watch a file for changes (NEW!)
+
+Watch a JSONL file and automatically process new lines as they are appended:
+
+```bash
+# Watch a file for changes
+go run . --file data/claude.jsonl
+
+# Or with environment variables
+SLACK_BOT_TOKEN=xxx SLACK_CHANNEL_ID=yyy SLACK_THREAD_TS=zzz go run . --file data/claude.jsonl
+
+# Or build and run
+go build -o claude-posts
+./claude-posts --file data/claude.jsonl
+```
+
+The file watch mode will:
+- Process the existing content in the file immediately
+- Continue watching for new lines appended to the file
+- Automatically process and post new messages as they are written
+- Track the file position to avoid reprocessing old content
 
 ## Input Format
 

@@ -8,7 +8,9 @@ import (
 	"log"
 	"os"
 	"strings"
+	"time"
 
+	"github.com/fsnotify/fsnotify"
 	"github.com/slack-go/slack"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
@@ -42,6 +44,7 @@ func main() {
 	pflag.String("channel-id", "", "Slack channel ID")
 	pflag.String("thread-ts", "", "Slack thread timestamp")
 	pflag.Bool("show-input", true, "Show input field in tool execution messages")
+	pflag.String("file", "", "JSONL file to watch for changes")
 	pflag.Parse()
 
 	if err := viper.BindPFlags(pflag.CommandLine); err != nil {
@@ -56,6 +59,7 @@ func main() {
 	slackChannelID := viper.GetString("channel-id")
 	slackThreadTS := viper.GetString("thread-ts")
 	showInput := viper.GetBool("show-input")
+	filePath := viper.GetString("file")
 
 	// Flag to determine if we're in debug mode (no Slack credentials)
 	debugMode := false
@@ -75,6 +79,17 @@ func main() {
 		api = slack.New(slackBotToken)
 	}
 
+	// If file path is provided, watch the file for changes
+	if filePath != "" {
+		watchFile(filePath, api, slackChannelID, slackThreadTS, debugMode, showInput)
+		return
+	}
+
+	// Otherwise, read from stdin (original behavior)
+	processStdin(api, slackChannelID, slackThreadTS, debugMode, showInput)
+}
+
+func processStdin(api *slack.Client, channelID, threadTS string, debugMode bool, showInput bool) {
 	// Set up reader for stdin that doesn't buffer full lines
 	reader := bufio.NewReader(os.Stdin)
 
@@ -88,7 +103,7 @@ func main() {
 		if err != nil {
 			if err == io.EOF {
 				// End of file, process any remaining data in buffer
-				processBuffer(&jsonBuffer, api, slackChannelID, slackThreadTS, debugMode, showInput)
+				processBuffer(&jsonBuffer, api, channelID, threadTS, debugMode, showInput)
 				break
 			}
 			log.Fatalf("Error reading from stdin: %v", err)
@@ -99,10 +114,101 @@ func main() {
 
 		// If we see a newline, try to process the buffer as a complete JSON object
 		if b == '\n' {
-			processBuffer(&jsonBuffer, api, slackChannelID, slackThreadTS, debugMode, showInput)
+			processBuffer(&jsonBuffer, api, channelID, threadTS, debugMode, showInput)
 			jsonBuffer.Reset()
 		}
 	}
+}
+
+func watchFile(filePath string, api *slack.Client, channelID, threadTS string, debugMode bool, showInput bool) {
+	// Create new watcher
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		log.Fatalf("Error creating file watcher: %v", err)
+	}
+	defer watcher.Close()
+
+	// Add file to watcher
+	err = watcher.Add(filePath)
+	if err != nil {
+		log.Fatalf("Error watching file %s: %v", filePath, err)
+	}
+
+	log.Printf("Watching file: %s", filePath)
+
+	// Track file position to only read new content
+	var lastPosition int64 = 0
+
+	// Process initial file content
+	lastPosition = processFileFromPosition(filePath, lastPosition, api, channelID, threadTS, debugMode, showInput)
+
+	// Watch for file changes
+	for {
+		select {
+		case event, ok := <-watcher.Events:
+			if !ok {
+				return
+			}
+
+			// Process on write events
+			if event.Op&fsnotify.Write == fsnotify.Write {
+				log.Printf("File modified: %s", event.Name)
+				// Small delay to ensure write is complete
+				time.Sleep(100 * time.Millisecond)
+				lastPosition = processFileFromPosition(filePath, lastPosition, api, channelID, threadTS, debugMode, showInput)
+			}
+
+		case err, ok := <-watcher.Errors:
+			if !ok {
+				return
+			}
+			log.Printf("Watcher error: %v", err)
+		}
+	}
+}
+
+func processFileFromPosition(filePath string, startPosition int64, api *slack.Client, channelID, threadTS string, debugMode bool, showInput bool) int64 {
+	file, err := os.Open(filePath)
+	if err != nil {
+		log.Printf("Error opening file: %v", err)
+		return startPosition
+	}
+	defer file.Close()
+
+	// Seek to the last read position
+	_, err = file.Seek(startPosition, 0)
+	if err != nil {
+		log.Printf("Error seeking file: %v", err)
+		return startPosition
+	}
+
+	reader := bufio.NewReader(file)
+	var jsonBuffer strings.Builder
+	currentPosition := startPosition
+
+	for {
+		b, err := reader.ReadByte()
+		if err != nil {
+			if err == io.EOF {
+				// Process any remaining data
+				processBuffer(&jsonBuffer, api, channelID, threadTS, debugMode, showInput)
+				break
+			}
+			log.Printf("Error reading file: %v", err)
+			break
+		}
+
+		currentPosition++
+		jsonBuffer.WriteByte(b)
+
+		// If we see a newline, process the buffer
+		if b == '\n' {
+			processBuffer(&jsonBuffer, api, channelID, threadTS, debugMode, showInput)
+			jsonBuffer.Reset()
+		}
+	}
+
+	return currentPosition
 }
 
 func processBuffer(jsonBuffer *strings.Builder, api *slack.Client, channelID, threadTS string, debugMode bool, showInput bool) {
