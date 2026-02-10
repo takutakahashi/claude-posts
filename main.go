@@ -137,7 +137,7 @@ func watchFile(filePath string, api *slack.Client, channelID, threadTS string, d
 	log.Printf("Watching file: %s", filePath)
 
 	// Track file position to only read new content
-	var lastPosition int64 = 0
+	var lastPosition int64
 
 	// Process initial file content
 	lastPosition = processFileFromPosition(filePath, lastPosition, api, channelID, threadTS, debugMode, showInput)
