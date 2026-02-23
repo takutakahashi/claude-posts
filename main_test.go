@@ -48,14 +48,14 @@ func TestProcessBuffer(t *testing.T) {
 				"message": {
 					"id": "test",
 					"type": "message",
-					"role": "assistant", 
+					"role": "assistant",
 					"model": "claude-3",
 					"content": [{"type": "tool_use", "name": "bash", "id": "tool1"}],
 					"stop_reason": "tool_use"
 				},
 				"session_id": "test"
 			}`,
-			expected: true,
+			expected: false,
 		},
 	}
 
@@ -65,7 +65,7 @@ func TestProcessBuffer(t *testing.T) {
 			buffer.WriteString(tt.input)
 
 			// Test in debug mode to avoid needing Slack credentials
-			processBuffer(&buffer, nil, "", "", true, true) // Default showInput to true
+			processBuffer(&buffer, nil, "", "", true)
 
 			// This is a basic test - in a real scenario you'd capture output
 			// For now, we're just testing that the function doesn't panic
