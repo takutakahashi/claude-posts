@@ -43,7 +43,6 @@ func main() {
 	pflag.String("bot-token", "", "Slack bot token")
 	pflag.String("channel-id", "", "Slack channel ID")
 	pflag.String("thread-ts", "", "Slack thread timestamp")
-	pflag.Bool("show-input", true, "Show input field in tool execution messages")
 	pflag.String("file", "", "JSONL file to watch for changes")
 	pflag.Parse()
 
@@ -58,7 +57,6 @@ func main() {
 	slackBotToken := viper.GetString("bot-token")
 	slackChannelID := viper.GetString("channel-id")
 	slackThreadTS := viper.GetString("thread-ts")
-	showInput := viper.GetBool("show-input")
 	filePath := viper.GetString("file")
 
 	// Flag to determine if we're in debug mode (no Slack credentials)
@@ -81,15 +79,15 @@ func main() {
 
 	// If file path is provided, watch the file for changes
 	if filePath != "" {
-		watchFile(filePath, api, slackChannelID, slackThreadTS, debugMode, showInput)
+		watchFile(filePath, api, slackChannelID, slackThreadTS, debugMode)
 		return
 	}
 
 	// Otherwise, read from stdin (original behavior)
-	processStdin(api, slackChannelID, slackThreadTS, debugMode, showInput)
+	processStdin(api, slackChannelID, slackThreadTS, debugMode)
 }
 
-func processStdin(api *slack.Client, channelID, threadTS string, debugMode bool, showInput bool) {
+func processStdin(api *slack.Client, channelID, threadTS string, debugMode bool) {
 	// Set up reader for stdin that doesn't buffer full lines
 	reader := bufio.NewReader(os.Stdin)
 
@@ -103,7 +101,7 @@ func processStdin(api *slack.Client, channelID, threadTS string, debugMode bool,
 		if err != nil {
 			if err == io.EOF {
 				// End of file, process any remaining data in buffer
-				processBuffer(&jsonBuffer, api, channelID, threadTS, debugMode, showInput)
+				processBuffer(&jsonBuffer, api, channelID, threadTS, debugMode)
 				break
 			}
 			log.Fatalf("Error reading from stdin: %v", err)
@@ -114,13 +112,13 @@ func processStdin(api *slack.Client, channelID, threadTS string, debugMode bool,
 
 		// If we see a newline, try to process the buffer as a complete JSON object
 		if b == '\n' {
-			processBuffer(&jsonBuffer, api, channelID, threadTS, debugMode, showInput)
+			processBuffer(&jsonBuffer, api, channelID, threadTS, debugMode)
 			jsonBuffer.Reset()
 		}
 	}
 }
 
-func watchFile(filePath string, api *slack.Client, channelID, threadTS string, debugMode bool, showInput bool) {
+func watchFile(filePath string, api *slack.Client, channelID, threadTS string, debugMode bool) {
 	// Create new watcher
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
@@ -140,7 +138,7 @@ func watchFile(filePath string, api *slack.Client, channelID, threadTS string, d
 	var lastPosition int64
 
 	// Process initial file content
-	lastPosition = processFileFromPosition(filePath, lastPosition, api, channelID, threadTS, debugMode, showInput)
+	lastPosition = processFileFromPosition(filePath, lastPosition, api, channelID, threadTS, debugMode)
 
 	// Watch for file changes
 	for {
@@ -155,7 +153,7 @@ func watchFile(filePath string, api *slack.Client, channelID, threadTS string, d
 				log.Printf("File modified: %s", event.Name)
 				// Small delay to ensure write is complete
 				time.Sleep(100 * time.Millisecond)
-				lastPosition = processFileFromPosition(filePath, lastPosition, api, channelID, threadTS, debugMode, showInput)
+				lastPosition = processFileFromPosition(filePath, lastPosition, api, channelID, threadTS, debugMode)
 			}
 
 		case err, ok := <-watcher.Errors:
@@ -167,7 +165,7 @@ func watchFile(filePath string, api *slack.Client, channelID, threadTS string, d
 	}
 }
 
-func processFileFromPosition(filePath string, startPosition int64, api *slack.Client, channelID, threadTS string, debugMode bool, showInput bool) int64 {
+func processFileFromPosition(filePath string, startPosition int64, api *slack.Client, channelID, threadTS string, debugMode bool) int64 {
 	file, err := os.Open(filePath)
 	if err != nil {
 		log.Printf("Error opening file: %v", err)
@@ -191,7 +189,7 @@ func processFileFromPosition(filePath string, startPosition int64, api *slack.Cl
 		if err != nil {
 			if err == io.EOF {
 				// Process any remaining data
-				processBuffer(&jsonBuffer, api, channelID, threadTS, debugMode, showInput)
+				processBuffer(&jsonBuffer, api, channelID, threadTS, debugMode)
 				break
 			}
 			log.Printf("Error reading file: %v", err)
@@ -203,7 +201,7 @@ func processFileFromPosition(filePath string, startPosition int64, api *slack.Cl
 
 		// If we see a newline, process the buffer
 		if b == '\n' {
-			processBuffer(&jsonBuffer, api, channelID, threadTS, debugMode, showInput)
+			processBuffer(&jsonBuffer, api, channelID, threadTS, debugMode)
 			jsonBuffer.Reset()
 		}
 	}
@@ -211,7 +209,7 @@ func processFileFromPosition(filePath string, startPosition int64, api *slack.Cl
 	return currentPosition
 }
 
-func processBuffer(jsonBuffer *strings.Builder, api *slack.Client, channelID, threadTS string, debugMode bool, showInput bool) {
+func processBuffer(jsonBuffer *strings.Builder, api *slack.Client, channelID, threadTS string, debugMode bool) {
 	jsonStr := jsonBuffer.String()
 	jsonStr = strings.TrimSpace(jsonStr)
 
@@ -234,68 +232,36 @@ func processBuffer(jsonBuffer *strings.Builder, api *slack.Client, channelID, th
 		log.Fatalf("Error parsing assistant message: %v", err)
 	}
 
-	// Filter for tool executions and text messages
+	// Filter for text messages only (tool outputs are excluded)
 	var textOutputs []string
-	var blocks []slack.Block
 
 	for _, content := range assistantMsg.Content {
-		if content.Type == "tool_use" {
-			// Create context block for tool execution
-			contextBlock := createToolUseContextBlock(content, showInput)
-			blocks = append(blocks, contextBlock)
-		} else if content.Type == "text" && strings.TrimSpace(content.Text) != "" {
+		if content.Type == "text" && strings.TrimSpace(content.Text) != "" {
 			textOutputs = append(textOutputs, strings.TrimSpace(content.Text))
 		}
 	}
 
-	// If there are outputs, either post to Slack or print to stdout
-	if len(textOutputs) > 0 || len(blocks) > 0 {
-		textMessage := ""
-		if len(textOutputs) > 0 {
-			textMessage = strings.Join(textOutputs, "\n")
-		}
+	// If there are text outputs, either post to Slack or print to stdout
+	if len(textOutputs) > 0 {
+		textMessage := strings.Join(textOutputs, "\n")
 
 		if debugMode {
 			// Debug mode: print to stdout
 			fmt.Println("DEBUG OUTPUT:")
 			fmt.Println("-------------")
-			if textMessage != "" {
-				fmt.Println(textMessage)
-			}
-
-			// Print block information in debug mode
-			for _, block := range blocks {
-				if contextBlock, ok := block.(*slack.ContextBlock); ok {
-					for _, elem := range contextBlock.ContextElements.Elements {
-						if textObj, ok := elem.(*slack.TextBlockObject); ok {
-							fmt.Println(textObj.Text)
-						}
-					}
-				}
-			}
+			fmt.Println(textMessage)
 			fmt.Println("-------------")
 		} else {
 			// Normal mode: post to Slack
-			var options []slack.MsgOption
-
-			options = append(options, slack.MsgOptionTS(threadTS))
-
-			// Add text if available
-			if textMessage != "" {
-				options = append(options, slack.MsgOptionText(textMessage, false))
-			}
-
-			// Add blocks if available
-			if len(blocks) > 0 {
-				options = append(options, slack.MsgOptionBlocks(blocks...))
-			}
-
-			_, _, err := api.PostMessage(channelID, options...)
+			_, _, err := api.PostMessage(channelID,
+				slack.MsgOptionTS(threadTS),
+				slack.MsgOptionText(textMessage, false),
+			)
 
 			if err != nil {
 				log.Printf("Error posting to Slack: %v", err)
 			} else {
-				log.Printf("Posted to Slack: text and/or blocks")
+				log.Printf("Posted to Slack: text message")
 			}
 		}
 	}
