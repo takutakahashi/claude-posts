@@ -142,6 +142,84 @@ func TestContentItem(t *testing.T) {
 	}
 }
 
+func TestConvertMarkdownToSlack(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "bold double asterisk",
+			input:    "**bold text**",
+			expected: "*bold text*",
+		},
+		{
+			name:     "bold double underscore",
+			input:    "__bold text__",
+			expected: "*bold text*",
+		},
+		{
+			name:     "italic single asterisk",
+			input:    "*italic text*",
+			expected: "_italic text_",
+		},
+		{
+			name:     "italic underscore unchanged",
+			input:    "_italic text_",
+			expected: "_italic text_",
+		},
+		{
+			name:     "header h1",
+			input:    "# My Title",
+			expected: "*My Title*",
+		},
+		{
+			name:     "header h3",
+			input:    "### Sub Title",
+			expected: "*Sub Title*",
+		},
+		{
+			name:     "strikethrough",
+			input:    "~~deleted~~",
+			expected: "~deleted~",
+		},
+		{
+			name:     "link",
+			input:    "[GitHub](https://github.com)",
+			expected: "<https://github.com|GitHub>",
+		},
+		{
+			name:     "bold and italic mixed",
+			input:    "**bold** and *italic*",
+			expected: "*bold* and _italic_",
+		},
+		{
+			name:     "code block preserved",
+			input:    "before\n```\n**not bold**\n```\nafter **bold**",
+			expected: "before\n```\n**not bold**\n```\nafter *bold*",
+		},
+		{
+			name:     "table wrapped in code block",
+			input:    "| Name | Value |\n|------|-------|\n| foo  | 123   |",
+			expected: "```\n| Name | Value |\n|------|-------|\n| foo  | 123   |\n```",
+		},
+		{
+			name:     "no markdown",
+			input:    "plain text message",
+			expected: "plain text message",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := convertMarkdownToSlack(tt.input)
+			if got != tt.expected {
+				t.Errorf("convertMarkdownToSlack(%q)\n  got:  %q\n  want: %q", tt.input, got, tt.expected)
+			}
+		})
+	}
+}
+
 func TestViperConfiguration(t *testing.T) {
 	viper.Reset()
 
