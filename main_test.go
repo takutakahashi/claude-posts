@@ -199,8 +199,8 @@ func TestConvertMarkdownToSlack(t *testing.T) {
 			expected: "before\n```\n**not bold**\n```\nafter *bold*",
 		},
 		{
-			name:  "table wrapped in code block",
-			input: "| Name | Value |\n|------|-------|\n| foo  | 123   |",
+			name:     "table wrapped in code block",
+			input:    "| Name | Value |\n|------|-------|\n| foo  | 123   |",
 			expected: "```\n| Name | Value |\n|------|-------|\n| foo  | 123   |\n```",
 		},
 		{
