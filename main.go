@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -209,6 +210,89 @@ func processFileFromPosition(filePath string, startPosition int64, api *slack.Cl
 	return currentPosition
 }
 
+// convertMarkdownToSlack converts Markdown-formatted text to Slack mrkdwn format.
+// It skips content inside fenced code blocks to preserve their formatting.
+func convertMarkdownToSlack(text string) string {
+	// Split on fenced code blocks so we don't mangle their contents.
+	codeBlockRe := regexp.MustCompile("(?s)```.*?```")
+
+	var result strings.Builder
+	lastIndex := 0
+	for _, loc := range codeBlockRe.FindAllStringIndex(text, -1) {
+		result.WriteString(convertMarkdownSyntax(text[lastIndex:loc[0]]))
+		result.WriteString(text[loc[0]:loc[1]])
+		lastIndex = loc[1]
+	}
+	result.WriteString(convertMarkdownSyntax(text[lastIndex:]))
+	return result.String()
+}
+
+// convertMarkdownSyntax applies mrkdwn conversions to a non-code-block segment.
+func convertMarkdownSyntax(text string) string {
+	// Tables first (multi-line structure)
+	text = convertTables(text)
+
+	// Headers: # Title -> *Title*
+	// Use a placeholder (\x00) so the italic pass below doesn't re-convert them.
+	headerRe := regexp.MustCompile(`(?m)^#{1,6}\s+(.+)$`)
+	text = headerRe.ReplaceAllString(text, "\x00${1}\x00")
+
+	// Bold: **text** or __text__ -> *text*
+	// Also use the placeholder for the same reason.
+	boldRe := regexp.MustCompile(`\*\*(.+?)\*\*`)
+	text = boldRe.ReplaceAllString(text, "\x00${1}\x00")
+	boldUnderRe := regexp.MustCompile(`__(.+?)__`)
+	text = boldUnderRe.ReplaceAllString(text, "\x00${1}\x00")
+
+	// Italic: *text* -> _text_ (only remaining single-asterisk pairs)
+	// Use ${1} to avoid Go regexp treating the trailing _ as part of the group name.
+	italicRe := regexp.MustCompile(`\*([^*\n]+?)\*`)
+	text = italicRe.ReplaceAllString(text, "_${1}_")
+
+	// Restore bold/header placeholders as Slack bold markers.
+	text = strings.ReplaceAll(text, "\x00", "*")
+
+	// Strikethrough: ~~text~~ -> ~text~
+	strikeRe := regexp.MustCompile(`~~(.+?)~~`)
+	text = strikeRe.ReplaceAllString(text, "~$1~")
+
+	// Links: [label](url) -> <url|label>
+	linkRe := regexp.MustCompile(`\[([^\]]+)\]\(([^)]+)\)`)
+	text = linkRe.ReplaceAllString(text, "<$2|$1>")
+
+	return text
+}
+
+// convertTables wraps Markdown table blocks in fenced code blocks so they
+// render as monospace text in Slack (which has no native table support).
+func convertTables(text string) string {
+	lines := strings.Split(text, "\n")
+	result := make([]string, 0, len(lines))
+	inTable := false
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		isTableRow := strings.HasPrefix(trimmed, "|")
+		if isTableRow {
+			if !inTable {
+				result = append(result, "```")
+				inTable = true
+			}
+			result = append(result, line)
+		} else {
+			if inTable {
+				result = append(result, "```")
+				inTable = false
+			}
+			result = append(result, line)
+		}
+	}
+	if inTable {
+		result = append(result, "```")
+	}
+	return strings.Join(result, "\n")
+}
+
 func processBuffer(jsonBuffer *strings.Builder, api *slack.Client, channelID, threadTS string, debugMode bool) {
 	jsonStr := jsonBuffer.String()
 	jsonStr = strings.TrimSpace(jsonStr)
@@ -243,7 +327,7 @@ func processBuffer(jsonBuffer *strings.Builder, api *slack.Client, channelID, th
 
 	// If there are text outputs, either post to Slack or print to stdout
 	if len(textOutputs) > 0 {
-		textMessage := strings.Join(textOutputs, "\n")
+		textMessage := convertMarkdownToSlack(strings.Join(textOutputs, "\n"))
 
 		if debugMode {
 			// Debug mode: print to stdout
